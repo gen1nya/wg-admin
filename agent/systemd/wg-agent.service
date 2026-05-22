@@ -1,0 +1,28 @@
+[Unit]
+Description=wg-admin agent (WireGuard admin API over unix socket)
+# Interface names are host-specific (wg0, wg-mesh, wg-exit-a, ...) so we
+# don't hardcode wg-quick@<name>.service deps here. The agent's post-boot
+# peer reconcile waits up to 10s per interface to ride out the race with
+# wg-quick. For tighter ordering drop in a host-specific override, e.g.:
+#
+#   /etc/systemd/system/wg-agent.service.d/after.conf:
+#     [Unit]
+#     After=wg-quick@wg0.service wg-quick@wg-mesh.service
+#     Wants=wg-quick@wg0.service wg-quick@wg-mesh.service
+After=network.target
+
+[Service]
+Type=simple
+ExecStart=/usr/local/bin/wg-agent daemon
+Restart=always
+RestartSec=3
+# Socket exposed to members of wg-admin group.
+# Create group beforehand: groupadd --system wg-admin
+User=root
+Group=wg-admin
+UMask=0007
+# Tighten as real kernel mode matures; for now keep permissive
+# since we still shell out to wg/ip/iptables/ipset.
+
+[Install]
+WantedBy=multi-user.target

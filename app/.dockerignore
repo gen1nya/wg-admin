@@ -1,0 +1,25 @@
+# collapse build context — multi-stage собирает сам
+node_modules
+dist
+
+# dev-only конфиг и секреты, в образ им не место
+dev-app.conf
+dev-session.secret
+dev-app.conf.example
+
+# тесты и их артефакты
+**/*.test.ts
+**/__tests__
+coverage
+
+# vcs / IDE
+.git
+.gitignore
+.vscode
+.idea
+
+# прочее
+*.log
+.DS_Store
+HANDOFF.md
+README.md

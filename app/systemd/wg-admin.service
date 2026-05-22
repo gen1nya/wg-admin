@@ -1,0 +1,28 @@
+[Unit]
+Description=wg-admin web UI
+After=network.target wg-agent.service
+Wants=wg-agent.service
+
+[Service]
+Type=simple
+User=www-data
+Group=wg-admin
+ExecStart=/usr/bin/node /opt/wg-admin-app/dist/server/index.js
+WorkingDirectory=/opt/wg-admin-app
+Environment=NODE_ENV=production
+Environment=WG_ADMIN_CONFIG=/etc/wg-admin/app.conf
+Environment=WG_ADMIN_SECRET=/etc/wg-admin/session.secret
+Restart=always
+RestartSec=3
+UMask=0007
+
+# hardening
+ProtectSystem=strict
+ProtectHome=yes
+PrivateTmp=yes
+NoNewPrivileges=yes
+ReadOnlyPaths=/opt/wg-admin-app /etc/wg-admin
+ReadWritePaths=/run/wg-agent.sock
+
+[Install]
+WantedBy=multi-user.target

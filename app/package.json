@@ -1,0 +1,42 @@
+{
+  "name": "wg-admin-app",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "description": "Web UI for wg-agent. Express server proxies /api/* to unix socket, Vue 3 SPA.",
+  "scripts": {
+    "dev": "concurrently -n srv,web -c blue,green \"npm:dev:server\" \"npm:dev:web\"",
+    "dev:server": "tsx watch server/index.ts",
+    "dev:web": "vite",
+    "build": "npm run build:web && npm run build:server",
+    "build:web": "vue-tsc --noEmit -p tsconfig.web.json && vite build",
+    "build:server": "tsc -p tsconfig.server.json",
+    "start": "node dist/server/index.js",
+    "hash": "tsx server/hash-cli.ts",
+    "lint": "vue-tsc --noEmit -p tsconfig.web.json && tsc --noEmit -p tsconfig.server.json",
+    "test": "vitest run"
+  },
+  "dependencies": {
+    "express": "^4.21.0",
+    "qrcode": "^1.5.4",
+    "vue": "^3.5.0",
+    "vue-router": "^4.4.0"
+  },
+  "devDependencies": {
+    "@tailwindcss/vite": "^4.0.0",
+    "@types/express": "^4.17.21",
+    "@types/node": "^22.0.0",
+    "@types/qrcode": "^1.5.5",
+    "@vitejs/plugin-vue": "^6.0.0",
+    "concurrently": "^9.1.0",
+    "tailwindcss": "^4.0.0",
+    "tsx": "^4.19.0",
+    "typescript": "^5.6.0",
+    "vite": "^8.0.0",
+    "vitest": "^4.0.0",
+    "vue-tsc": "^2.1.0"
+  },
+  "engines": {
+    "node": ">=22"
+  }
+}

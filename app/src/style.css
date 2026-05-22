@@ -1,0 +1,20 @@
+@import "tailwindcss";
+
+@theme {
+  --font-sans: ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+  --font-mono: ui-monospace, "Cascadia Mono", "Source Code Pro", Menlo, monospace;
+}
+
+html, body, #app {
+  height: 100%;
+}
+
+body {
+  font-family: var(--font-sans);
+}
+
+/* subtle scrollbar to match dark theme */
+*::-webkit-scrollbar { width: 10px; height: 10px; }
+*::-webkit-scrollbar-track { background: transparent; }
+*::-webkit-scrollbar-thumb { background: #404040; border-radius: 6px; }
+*::-webkit-scrollbar-thumb:hover { background: #525252; }

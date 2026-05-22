@@ -1,0 +1,47 @@
+# Прод-раскладка wg-admin UI. Deploy alongside an nginx-stream container (or any L7 reverse proxy).
+#
+# Перед первым запуском на хосте:
+#   1. groupadd --system wg-admin                      # если ещё не создан
+#   2. mkdir -p /etc/wg-admin && chmod 0750 /etc/wg-admin && chgrp wg-admin /etc/wg-admin
+#   3. openssl rand 32 > /etc/wg-admin/session.secret
+#      chmod 0640 /etc/wg-admin/session.secret && chgrp wg-admin /etc/wg-admin/session.secret
+#   4. Заполнить /etc/wg-admin/app.conf (user, password_hash, socket, listen_*).
+#      chmod 0640 /etc/wg-admin/app.conf && chgrp wg-admin /etc/wg-admin/app.conf
+#   5. Узнать GID wg-admin:  getent group wg-admin | cut -d: -f3
+#      Вписать в group_add ниже.
+#   6. Узнать имя docker-сети, где живёт nginx-stream (напр. nginx_default):
+#      docker inspect nginx-stream --format '{{range $k,$_ := .NetworkSettings.Networks}}{{$k}} {{end}}'
+#      Подставить в networks.external.name ниже.
+#   7. В nginx.conf добавить server-block для wg-admin.example.com с
+#      proxy_pass http://wg-admin-app:3000;
+#      docker exec nginx-stream nginx -s reload
+#
+# После обновления кода:
+#   docker compose build && docker compose up -d
+
+services:
+  wg-admin-app:
+    build: .
+    container_name: wg-admin-app
+    restart: unless-stopped
+    volumes:
+      # Unix-сокет агента — читается через supplementary group.
+      - /run/wg-agent.sock:/run/wg-agent.sock
+      # Конфиг и сессионный секрет. Read-only: session.secret заранее сгенерирован
+      # на хосте, приложение не должно его переписывать.
+      - /etc/wg-admin:/etc/wg-admin:ro
+    environment:
+      NODE_ENV: production
+    group_add:
+      # GID группы wg-admin на ХОСТЕ. Узнать: getent group wg-admin | cut -d: -f3
+      # Иначе контейнер не сможет прочитать ни сокет, ни /etc/wg-admin/*.
+      - "${WG_ADMIN_GID:?set WG_ADMIN_GID in .env}"
+    networks:
+      - nginx
+
+networks:
+  nginx:
+    external: true
+    # Имя сети nginx-stream на хосте. Узнать:
+    #   docker inspect nginx-stream --format '{{range $k,$_ := .NetworkSettings.Networks}}{{$k}}{{end}}'
+    name: "${NGINX_NETWORK:?set NGINX_NETWORK in .env}"

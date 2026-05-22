@@ -1,0 +1,40 @@
+# secrets / runtime state
+.env
+*.log
+
+# production backups with real private keys — never commit
+_backup-*/
+
+# operator-private docs and notes (deployment-specific)
+docs/
+legacy/
+
+# dev secrets / live config (use the .example file as a template)
+app/dev-app.conf
+app/dev-session.secret
+
+# node
+node_modules/
+dist/
+
+# go build output
+agent/wg-agent
+agent/cmd/wg-agent/wg-agent
+
+# sqlite runtime files
+*.db
+*.db-wal
+*.db-shm
+*.sqlite
+*.sqlite-wal
+*.sqlite-shm
+
+# IDE / editor
+.idea/
+.vscode/
+*.swp
+.DS_Store
+
+# test coverage
+coverage.out
+*.cover

@@ -1,0 +1,7 @@
+{
+  "user": "admin",
+  "password_hash": "scrypt:GENERATE_WITH_npm_run_hash",
+  "socket": "/tmp/wg-agent.sock",
+  "listen_host": "127.0.0.1",
+  "listen_port": 3000
+}

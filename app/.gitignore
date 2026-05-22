@@ -1,0 +1,10 @@
+node_modules/
+dist/
+*.log
+.DS_Store
+.env
+.env.local
+
+# dev-only конфиг и сессионный секрет — генерируются локально, не коммитить
+dev-app.conf
+dev-session.secret
