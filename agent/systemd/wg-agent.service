@@ -10,6 +10,12 @@ Description=wg-admin agent (WireGuard admin API over unix socket)
 #     After=wg-quick@wg0.service wg-quick@wg-mesh.service
 #     Wants=wg-quick@wg0.service wg-quick@wg-mesh.service
 After=network.target
+# Socket activation: systemd owns /run/wg-agent.sock (see wg-agent.socket) and
+# passes the listening fd in, so the inode stays stable across service
+# restarts. The binary falls back to creating its own socket if started
+# without these (dev / -mock / hosts that don't install the .socket unit).
+Requires=wg-agent.socket
+After=wg-agent.socket
 
 [Service]
 Type=simple

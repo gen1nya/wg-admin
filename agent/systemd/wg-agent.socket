@@ -1,0 +1,17 @@
+[Unit]
+Description=wg-admin agent API socket
+# systemd owns this socket so its inode survives `systemctl restart
+# wg-agent.service`. That keeps the UI container's bind-mount of
+# /run/wg-agent.sock valid across agent restarts — a self-created socket gets
+# a fresh inode each start, and the container (pinning the old one) would hit
+# ECONNREFUSED until it too was restarted.
+
+[Socket]
+ListenStream=/run/wg-agent.sock
+SocketMode=0660
+SocketGroup=wg-admin
+# Keep the socket up while the service bounces; don't unlink mid-restart.
+RemoveOnStop=no
+
+[Install]
+WantedBy=sockets.target
