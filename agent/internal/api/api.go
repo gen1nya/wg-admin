@@ -6,6 +6,7 @@ import (
 	"net/http"
 	"sync"
 
+	"github.com/gen1nya/wg-admin/agent/internal/geoip"
 	"github.com/gen1nya/wg-admin/agent/internal/kernel"
 	"github.com/gen1nya/wg-admin/agent/internal/plan"
 	"github.com/gen1nya/wg-admin/agent/internal/store"
@@ -15,6 +16,11 @@ type Server struct {
 	Store  *store.Store
 	Kernel kernel.Kernel
 	Plan   *plan.Engine
+
+	// Geo resolves peer endpoint IPs to coarse locations for the map view.
+	// May be a disabled (no-op) resolver when no geo DB is configured; the
+	// nil *geoip.Resolver is also safe to call.
+	Geo *geoip.Resolver
 
 	// peerMu serializes peer address allocation + insert so two concurrent
 	// POSTs can't read the same "free" address and both claim it. The unique
@@ -43,6 +49,7 @@ func (s *Server) Mux() http.Handler {
 	mux.HandleFunc("GET /exits", s.listExits)
 	mux.HandleFunc("GET /marks", s.listMarks)
 	mux.HandleFunc("GET /traffic", s.listTraffic)
+	mux.HandleFunc("GET /geo", s.listGeo)
 
 	mux.HandleFunc("GET /audit", s.listAudit)
 

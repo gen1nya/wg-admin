@@ -14,6 +14,7 @@ import (
 
 	"github.com/gen1nya/wg-admin/agent/internal/api"
 	"github.com/gen1nya/wg-admin/agent/internal/devseed"
+	"github.com/gen1nya/wg-admin/agent/internal/geoip"
 	"github.com/gen1nya/wg-admin/agent/internal/importer"
 	"github.com/gen1nya/wg-admin/agent/internal/kernel"
 	"github.com/gen1nya/wg-admin/agent/internal/plan"
@@ -21,6 +22,15 @@ import (
 	"github.com/gen1nya/wg-admin/agent/internal/server"
 	"github.com/gen1nya/wg-admin/agent/internal/store"
 )
+
+// envOr returns the environment variable's value if set and non-empty,
+// otherwise def. Used to let env override a flag default.
+func envOr(key, def string) string {
+	if v := os.Getenv(key); v != "" {
+		return v
+	}
+	return def
+}
 
 func usage() {
 	fmt.Fprintf(os.Stderr, `wg-agent — WireGuard admin agent
@@ -32,6 +42,7 @@ Usage:
 Flags (daemon):
   -socket   unix socket path (default /run/wg-agent.sock)
   -db       sqlite path       (default /var/lib/wg-admin/state.db)
+  -geoip    MaxMind .mmdb path (default /var/lib/wg-admin/GeoLite2-City.mmdb; absent = geo off)
   -mock     use in-memory kernel instead of host state
 
 Flags (import):
@@ -118,6 +129,8 @@ func runDaemon(args []string) error {
 	fs := flag.NewFlagSet("daemon", flag.ExitOnError)
 	socketPath := fs.String("socket", "/run/wg-agent.sock", "unix socket path")
 	dbPath := fs.String("db", "/var/lib/wg-admin/state.db", "sqlite database path")
+	geoipPath := fs.String("geoip", envOr("WG_ADMIN_GEOIP_DB", "/var/lib/wg-admin/GeoLite2-City.mmdb"),
+		"path to a MaxMind .mmdb (GeoLite2-City/-Country); absent file = geo disabled")
 	mock := fs.Bool("mock", false, "use mock kernel (no host changes)")
 	_ = fs.Parse(args)
 
@@ -158,7 +171,18 @@ func runDaemon(args []string) error {
 		reconcileCancel()
 	}
 
-	apiSrv := &api.Server{Store: st, Kernel: k, Plan: engine}
+	geo, err := geoip.Open(*geoipPath)
+	if err != nil {
+		return fmt.Errorf("open geoip db %q: %w", *geoipPath, err)
+	}
+	defer geo.Close()
+	if geo.Enabled() {
+		slog.Info("geoip database loaded", "db", geo.Database(), "path", geo.Path())
+	} else {
+		slog.Info("geoip disabled (no database)", "path", geo.Path())
+	}
+
+	apiSrv := &api.Server{Store: st, Kernel: k, Plan: engine, Geo: geo}
 	srv := server.New(server.Config{
 		SocketPath: *socketPath,
 		SocketMode: 0o660,
