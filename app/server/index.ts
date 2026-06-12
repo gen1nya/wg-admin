@@ -17,8 +17,10 @@ const app = express();
 app.disable('x-powered-by');
 app.use(securityHeaders(cfg.dev));
 
+// Unauthenticated liveness check. Keep it contentless — no socket path or
+// dev flag — so an anonymous probe learns nothing about the deployment.
 app.get('/health', (_req, res) => {
-  res.json({ ok: true, socket: cfg.socket, dev: cfg.dev });
+  res.json({ ok: true });
 });
 
 app.post('/auth/login', express.json({ limit: '4kb' }), requireSameOrigin(cfg), loginHandler(cfg));
