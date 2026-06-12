@@ -28,6 +28,16 @@ func GenPair() (string, string, error) {
 		base64.StdEncoding.EncodeToString(pub), nil
 }
 
+// GenPSK returns a fresh WireGuard preshared key: 32 random bytes, base64.
+// Unlike a keypair there's no clamping — a PSK is opaque symmetric key material.
+func GenPSK() (string, error) {
+	var psk [32]byte
+	if _, err := rand.Read(psk[:]); err != nil {
+		return "", fmt.Errorf("rand: %w", err)
+	}
+	return base64.StdEncoding.EncodeToString(psk[:]), nil
+}
+
 // PublicFromPrivate derives the public key (base64) from a base64-encoded
 // 32-byte WireGuard private key.
 func PublicFromPrivate(privB64 string) (string, error) {

@@ -117,8 +117,11 @@ func (r *Real) ShowInterface(name string) (InterfaceStatus, error) {
 	return parseWGDump(name, out)
 }
 
-// SetPeer upserts allowed-ips on the given peer. Idempotent.
-func (r *Real) SetPeer(iface, publicKey, allowedIPs string) error {
+// SetPeer upserts allowed-ips (and, if presharedKey is non-empty, the PSK) on
+// the given peer. Idempotent. An empty presharedKey leaves any existing PSK
+// untouched — clearing a PSK is not a tier-1 operation. The key is piped via
+// /dev/stdin so it never touches disk.
+func (r *Real) SetPeer(iface, publicKey, allowedIPs, presharedKey string) error {
 	if err := validateInterfaceName(iface); err != nil {
 		return err
 	}
@@ -128,7 +131,16 @@ func (r *Real) SetPeer(iface, publicKey, allowedIPs string) error {
 	if err := validateAllowedIPs(allowedIPs); err != nil {
 		return err
 	}
-	_, err := r.run(r.WgPath, "set", iface, "peer", publicKey, "allowed-ips", allowedIPs)
+	args := []string{"set", iface, "peer", publicKey, "allowed-ips", allowedIPs}
+	var stdin []byte
+	if presharedKey != "" {
+		if err := validatePresharedKey(presharedKey); err != nil {
+			return err
+		}
+		args = append(args, "preshared-key", "/dev/stdin")
+		stdin = []byte(presharedKey + "\n")
+	}
+	_, err := r.runStdin(r.WgPath, stdin, args...)
 	if err != nil && isWGMissing(err) {
 		return fmt.Errorf("%w: %s", ErrInterfaceNotFound, iface)
 	}
@@ -396,8 +408,13 @@ func parseWGDump(name string, out []byte) (InterfaceStatus, error) {
 		if allowed == "(none)" {
 			allowed = ""
 		}
+		psk := f[1]
+		if psk == "(none)" {
+			psk = ""
+		}
 		st.Peers = append(st.Peers, PeerStatus{
 			PublicKey:       f[0],
+			PresharedKey:    psk,
 			Endpoint:        ep,
 			AllowedIPs:      allowed,
 			LatestHandshake: hs,

@@ -21,17 +21,17 @@ import (
 )
 
 type Options struct {
-	FromDir      string   // /etc/wireguard-like root
-	Only         []string // restrict to these interface names (empty = all)
-	DryRun       bool
-	PublicHost   string // applied to every interface if set (else left empty)
+	FromDir    string   // /etc/wireguard-like root
+	Only       []string // restrict to these interface names (empty = all)
+	DryRun     bool
+	PublicHost string // applied to every interface if set (else left empty)
 }
 
 type Stats struct {
-	Interfaces  int
-	Peers       int
-	PeersNoKey  int // peers imported without a stored client private key
-	Skipped     []string
+	Interfaces int
+	Peers      int
+	PeersNoKey int // peers imported without a stored client private key
+	Skipped    []string
 }
 
 type clientInfo struct {
@@ -62,8 +62,8 @@ func Run(ctx context.Context, st *store.Store, opt Options) (*Stats, error) {
 	}
 
 	var (
-		clients    map[string]*clientInfo
-		confPaths  []string
+		clients   map[string]*clientInfo
+		confPaths []string
 	)
 	if info.IsDir() {
 		clients, err = scanClientsDirs(opt.FromDir)
@@ -233,14 +233,15 @@ func Run(ctx context.Context, st *store.Store, opt Options) (*Stats, error) {
 				stats.PeersNoKey++
 			}
 			peer := &model.Peer{
-				InterfaceID: ifaceID,
-				Name:        name,
-				PublicKey:   pPeer.PublicKey,
-				PrivateKey:  privKey,
-				Address:     address,
-				Enabled:     true,
-				Tags:        "[]",
-				CreatedAt:   now,
+				InterfaceID:  ifaceID,
+				Name:         name,
+				PublicKey:    pPeer.PublicKey,
+				PrivateKey:   privKey,
+				PresharedKey: pPeer.PresharedKey,
+				Address:      address,
+				Enabled:      true,
+				Tags:         "[]",
+				CreatedAt:    now,
 			}
 			if _, err := st.InsertPeer(ctx, peer); err != nil {
 				return stats, fmt.Errorf("insert peer %s on %s: %w", shortKey(pPeer.PublicKey), ifaceName, err)

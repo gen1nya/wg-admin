@@ -77,7 +77,7 @@ func (m *Mock) ShowInterface(name string) (InterfaceStatus, error) {
 	return *iface, nil
 }
 
-func (m *Mock) SetPeer(iface, publicKey, allowedIPs string) error {
+func (m *Mock) SetPeer(iface, publicKey, allowedIPs, presharedKey string) error {
 	m.mu.Lock()
 	defer m.mu.Unlock()
 	ifc, ok := m.Interfaces[iface]
@@ -87,12 +87,16 @@ func (m *Mock) SetPeer(iface, publicKey, allowedIPs string) error {
 	for i, p := range ifc.Peers {
 		if p.PublicKey == publicKey {
 			ifc.Peers[i].AllowedIPs = allowedIPs
+			if presharedKey != "" { // "" leaves the existing PSK untouched
+				ifc.Peers[i].PresharedKey = presharedKey
+			}
 			return nil
 		}
 	}
 	ifc.Peers = append(ifc.Peers, PeerStatus{
-		PublicKey:  publicKey,
-		AllowedIPs: allowedIPs,
+		PublicKey:    publicKey,
+		AllowedIPs:   allowedIPs,
+		PresharedKey: presharedKey,
 	})
 	return nil
 }

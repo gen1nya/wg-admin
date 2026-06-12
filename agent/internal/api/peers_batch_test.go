@@ -1,6 +1,7 @@
 package api_test
 
 import (
+	"strings"
 	"testing"
 )
 
@@ -124,5 +125,37 @@ func TestUpdatePeerMetadataDoesNotTouchKernel(t *testing.T) {
 	}
 	if !ts.kernelHasPeer(t, "wg0", pub) {
 		t.Error("metadata patch dropped the peer from the kernel")
+	}
+}
+
+// TestNewPeerGetsPSKAndConfigRenders: a freshly created peer is assigned a
+// preshared key, the kernel is told about it, and the rendered .conf carries
+// a PresharedKey line — while the secret never leaks into /peers JSON.
+func TestNewPeerGetsPSKAndConfigRenders(t *testing.T) {
+	ts := newTestServer(t)
+
+	w := ts.do(t, "POST", "/interfaces/wg0/peers", map[string]any{"name": "pskuser"})
+	if w.Code != 201 {
+		t.Fatalf("create: %d %s", w.Code, w.Body.String())
+	}
+	created := decode[map[string]any](t, w)
+	id := int(created["id"].(float64))
+	// Secret must not be serialized in the create response or list endpoints.
+	if _, leaked := created["preshared_key"]; leaked {
+		t.Error("preshared_key leaked in create response JSON")
+	}
+	w = ts.do(t, "GET", "/peers", nil)
+	if strings.Contains(w.Body.String(), "preshared") {
+		t.Error("preshared_key leaked in GET /peers JSON")
+	}
+
+	// Rendered client .conf must include the PresharedKey line.
+	w = ts.do(t, "GET", httpPath("/peers/%d/config", id), nil)
+	if w.Code != 200 {
+		t.Fatalf("config: %d %s", w.Code, w.Body.String())
+	}
+	conf, _ := decode[map[string]any](t, w)["config"].(string)
+	if !strings.Contains(conf, "PresharedKey = ") {
+		t.Errorf("config missing PresharedKey line:\n%s", conf)
 	}
 }

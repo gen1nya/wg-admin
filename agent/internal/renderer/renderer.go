@@ -34,6 +34,9 @@ func ClientConfig(iface model.Interface, peer model.Peer) (string, error) {
 
 	b.WriteString("\n[Peer]\n")
 	fmt.Fprintf(&b, "PublicKey = %s\n", serverPub)
+	if peer.PresharedKey != "" {
+		fmt.Fprintf(&b, "PresharedKey = %s\n", peer.PresharedKey)
+	}
 	fmt.Fprintf(&b, "Endpoint = %s:%d\n", iface.PublicEndpoint, iface.PublicPort)
 	allowed := iface.ClientAllowedIPs
 	if allowed == "" {

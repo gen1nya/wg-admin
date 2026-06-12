@@ -2,9 +2,9 @@ package model
 
 // Interface roles.
 //
-//   RoleClients — accepts end-user peers; API can CRUD peers, render .conf, auto-allocate /32.
-//   RoleMesh    — tunnel to another server (exit, mesh link); peers are remote endpoints,
-//                 not end-users. Read-only via API; tier-2 exits table governs routing.
+//	RoleClients — accepts end-user peers; API can CRUD peers, render .conf, auto-allocate /32.
+//	RoleMesh    — tunnel to another server (exit, mesh link); peers are remote endpoints,
+//	              not end-users. Read-only via API; tier-2 exits table governs routing.
 const (
 	RoleClients = "clients"
 	RoleMesh    = "mesh"
@@ -30,32 +30,36 @@ type Exit struct {
 }
 
 type Interface struct {
-	ID             int64  `json:"id"`
-	Name           string `json:"name"`
-	Address        string `json:"address"`
-	Subnet         string `json:"subnet"`
-	ListenPort     int    `json:"listen_port"`
-	MTU            *int   `json:"mtu,omitempty"`
-	PrivateKey     string `json:"private_key"`
-	PublicEndpoint string `json:"public_endpoint"`
-	PublicPort     int    `json:"public_port"`
-	DNS            string `json:"dns"`
+	ID               int64  `json:"id"`
+	Name             string `json:"name"`
+	Address          string `json:"address"`
+	Subnet           string `json:"subnet"`
+	ListenPort       int    `json:"listen_port"`
+	MTU              *int   `json:"mtu,omitempty"`
+	PrivateKey       string `json:"private_key"`
+	PublicEndpoint   string `json:"public_endpoint"`
+	PublicPort       int    `json:"public_port"`
+	DNS              string `json:"dns"`
 	Keepalive        int    `json:"keepalive"`
 	DefaultExitID    *int64 `json:"default_exit_id,omitempty"`
 	ClientAllowedIPs string `json:"client_allowed_ips"`
 	CustomPostUp     string `json:"custom_postup"`
 	CustomPostDown   string `json:"custom_postdown"`
-	Enabled        bool   `json:"enabled"`
-	Role           string `json:"role"` // clients|mesh
-	CreatedAt      int64  `json:"created_at"`
+	Enabled          bool   `json:"enabled"`
+	Role             string `json:"role"` // clients|mesh
+	CreatedAt        int64  `json:"created_at"`
 }
 
 type Peer struct {
-	ID            int64  `json:"id"`
-	InterfaceID   int64  `json:"interface_id"`
-	Name          string `json:"name"`
-	PublicKey     string `json:"public_key"`
-	PrivateKey    string `json:"private_key"`
+	ID          int64  `json:"id"`
+	InterfaceID int64  `json:"interface_id"`
+	Name        string `json:"name"`
+	PublicKey   string `json:"public_key"`
+	PrivateKey  string `json:"private_key"`
+	// PresharedKey never leaves the agent in API JSON (json:"-") — it's a
+	// secret used only to render the client .conf and configure the kernel.
+	// Empty means the peer has no PSK.
+	PresharedKey  string `json:"-"`
 	Address       string `json:"address"`
 	DefaultExitID *int64 `json:"default_exit_id,omitempty"`
 	Enabled       bool   `json:"enabled"`

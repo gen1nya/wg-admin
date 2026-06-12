@@ -10,14 +10,14 @@ import (
 	"github.com/gen1nya/wg-admin/agent/internal/model"
 )
 
-const peerCols = `id, interface_id, name, public_key, private_key, address,
-	default_exit_id, enabled, notes, tags, created_at`
+const peerCols = `id, interface_id, name, public_key, private_key, preshared_key,
+	address, default_exit_id, enabled, notes, tags, created_at`
 
 func scanPeer(row interface{ Scan(...any) error }) (model.Peer, error) {
 	var p model.Peer
 	var defaultExitID sql.NullInt64
 	err := row.Scan(
-		&p.ID, &p.InterfaceID, &p.Name, &p.PublicKey, &p.PrivateKey,
+		&p.ID, &p.InterfaceID, &p.Name, &p.PublicKey, &p.PrivateKey, &p.PresharedKey,
 		&p.Address, &defaultExitID, &p.Enabled, &p.Notes, &p.Tags, &p.CreatedAt,
 	)
 	if err != nil {
@@ -87,11 +87,11 @@ func (s *Store) InsertPeer(ctx context.Context, p *model.Peer) (int64, error) {
 		defaultExitID = *p.DefaultExitID
 	}
 	res, err := s.DB.ExecContext(ctx, `
-		INSERT INTO peers (interface_id, name, public_key, private_key, address,
-			default_exit_id, enabled, notes, tags, created_at)
-		VALUES (?,?,?,?,?, ?,?,?,?,?)`,
-		p.InterfaceID, p.Name, p.PublicKey, p.PrivateKey, p.Address,
-		defaultExitID, p.Enabled, p.Notes, p.Tags, p.CreatedAt,
+		INSERT INTO peers (interface_id, name, public_key, private_key, preshared_key,
+			address, default_exit_id, enabled, notes, tags, created_at)
+		VALUES (?,?,?,?,?, ?,?,?,?,?, ?)`,
+		p.InterfaceID, p.Name, p.PublicKey, p.PrivateKey, p.PresharedKey,
+		p.Address, defaultExitID, p.Enabled, p.Notes, p.Tags, p.CreatedAt,
 	)
 	if err != nil {
 		return 0, err

@@ -240,3 +240,40 @@ func TestPeersAuditsEachClientsInterface(t *testing.T) {
 		t.Errorf("action=%q", fs.auditCalls[0].Action)
 	}
 }
+
+// TestPeersSyncsPSK: a stored PSK that differs from the kernel is pushed; an
+// empty stored PSK leaves the kernel's existing PSK untouched (we never strip
+// a PSK the DB just doesn't know about yet — e.g. before a backfill).
+func TestPeersSyncsPSK(t *testing.T) {
+	fs := &fakeStore{
+		interfaces: []model.Interface{
+			{ID: 1, Name: "wg0", Role: model.RoleClients, Enabled: true},
+		},
+		peers: map[int64][]model.Peer{
+			1: {
+				{PublicKey: "KEYA", Address: "10.10.10.2/32", PresharedKey: "PSK-A", Enabled: true},
+				{PublicKey: "KEYB", Address: "10.10.10.3/32", PresharedKey: "", Enabled: true},
+			},
+		},
+	}
+	k := mockWithPeers("wg0",
+		kernel.PeerStatus{PublicKey: "KEYA", AllowedIPs: "10.10.10.2/32", PresharedKey: ""},            // PSK missing → must be set
+		kernel.PeerStatus{PublicKey: "KEYB", AllowedIPs: "10.10.10.3/32", PresharedKey: "KERNEL-ONLY"}, // DB empty → leave
+	)
+
+	if err := Peers(context.Background(), fs, k); err != nil {
+		t.Fatalf("Peers: %v", err)
+	}
+
+	st, _ := k.ShowInterface("wg0")
+	got := map[string]string{}
+	for _, p := range st.Peers {
+		got[p.PublicKey] = p.PresharedKey
+	}
+	if got["KEYA"] != "PSK-A" {
+		t.Errorf("KEYA psk=%q, want PSK-A (stored PSK should be pushed)", got["KEYA"])
+	}
+	if got["KEYB"] != "KERNEL-ONLY" {
+		t.Errorf("KEYB psk=%q, want KERNEL-ONLY (empty DB PSK must not strip kernel)", got["KEYB"])
+	}
+}

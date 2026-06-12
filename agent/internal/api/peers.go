@@ -89,6 +89,13 @@ func (s *Server) createPeer(w http.ResponseWriter, r *http.Request) {
 		writeErr(w, http.StatusInternalServerError, "keygen: "+err.Error())
 		return
 	}
+	// New peers get a preshared key by default — it's a free symmetric hardening
+	// layer and matches the existing fleet (the imported wg-easy peers had one).
+	psk, err := wgkey.GenPSK()
+	if err != nil {
+		writeErr(w, http.StatusInternalServerError, "genpsk: "+err.Error())
+		return
+	}
 
 	tags := req.Tags
 	if tags == "" {
@@ -110,6 +117,7 @@ func (s *Server) createPeer(w http.ResponseWriter, r *http.Request) {
 		Name:          req.Name,
 		PublicKey:     pub,
 		PrivateKey:    priv,
+		PresharedKey:  psk,
 		Address:       addr,
 		DefaultExitID: req.DefaultExitID,
 		Enabled:       true,
@@ -131,7 +139,7 @@ func (s *Server) createPeer(w http.ResponseWriter, r *http.Request) {
 	}
 	peer.ID = id
 
-	if err := s.Kernel.SetPeer(iface.Name, pub, addr); err != nil {
+	if err := s.Kernel.SetPeer(iface.Name, pub, addr, psk); err != nil {
 		// rollback DB row — keep DB/kernel in sync
 		if delErr := s.Store.DeletePeer(ctx, id); delErr != nil {
 			slog.Error("rollback after kernel failure", "err", delErr, "orig", err)
@@ -256,7 +264,7 @@ func (s *Server) updatePeer(w http.ResponseWriter, r *http.Request) {
 		if iface, ierr := s.Store.GetInterface(r.Context(), updated.InterfaceID); ierr == nil && iface.Role == model.RoleClients {
 			var kerr error
 			if *patch.Enabled {
-				kerr = s.Kernel.SetPeer(iface.Name, updated.PublicKey, updated.Address)
+				kerr = s.Kernel.SetPeer(iface.Name, updated.PublicKey, updated.Address, updated.PresharedKey)
 			} else {
 				kerr = s.Kernel.RemovePeer(iface.Name, updated.PublicKey)
 			}

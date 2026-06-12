@@ -108,17 +108,18 @@ func syncPeers(k kernel.Kernel, iface string, desired []model.Peer) (SyncResult,
 	if err != nil {
 		return res, fmt.Errorf("show %s: %w", iface, err)
 	}
-	current := make(map[string]string, len(st.Peers)) // pubkey -> allowed-ips
+	type peerState struct{ allowedIPs, psk string }
+	current := make(map[string]peerState, len(st.Peers))
 	for _, p := range st.Peers {
-		current[p.PublicKey] = p.AllowedIPs
+		current[p.PublicKey] = peerState{p.AllowedIPs, p.PresharedKey}
 	}
 
-	want := make(map[string]string, len(desired))
+	want := make(map[string]model.Peer, len(desired))
 	for _, p := range desired {
 		if !p.Enabled {
 			continue
 		}
-		want[p.PublicKey] = p.Address
+		want[p.PublicKey] = p
 	}
 
 	// Remove peers that aren't in DB. Agent is authoritative for clients iface.
@@ -132,14 +133,18 @@ func syncPeers(k kernel.Kernel, iface string, desired []model.Peer) (SyncResult,
 		}
 		res.Removed++
 	}
-	// Upsert: add new peers and realign drifted allowed-ips.
-	for pk, addr := range want {
+	// Upsert: add new peers, realign drifted allowed-ips, and set a stored PSK
+	// when it differs. A stored PSK of "" is treated as "don't touch" so we
+	// never strip a kernel PSK that the DB simply doesn't know about yet.
+	for pk, p := range want {
 		cur, had := current[pk]
-		if had && cur == addr {
+		addrOK := had && cur.allowedIPs == p.Address
+		pskOK := p.PresharedKey == "" || (had && cur.psk == p.PresharedKey)
+		if addrOK && pskOK {
 			res.Unchanged++
 			continue
 		}
-		if err := k.SetPeer(iface, pk, addr); err != nil {
+		if err := k.SetPeer(iface, pk, p.Address, p.PresharedKey); err != nil {
 			slog.Warn("set peer", "iface", iface, "pubkey", shortKey(pk), "err", err)
 			continue
 		}

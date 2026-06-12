@@ -7,7 +7,10 @@
 package kernel
 
 type PeerStatus struct {
-	PublicKey       string `json:"public_key"`
+	PublicKey string `json:"public_key"`
+	// PresharedKey is read from `wg show dump` for reconcile drift checks; it's
+	// a secret so it never appears in API JSON (json:"-"). "" means no PSK.
+	PresharedKey    string `json:"-"`
 	Endpoint        string `json:"endpoint"`
 	AllowedIPs      string `json:"allowed_ips"`
 	LatestHandshake int64  `json:"latest_handshake"` // unix seconds
@@ -49,7 +52,8 @@ type Kernel interface {
 	ShowInterface(name string) (InterfaceStatus, error)
 
 	// WireGuard — peer ops (Tier-1, immediate)
-	SetPeer(iface, publicKey, allowedIPs string) error
+	// presharedKey "" leaves the peer's PSK untouched; non-empty sets it.
+	SetPeer(iface, publicKey, allowedIPs, presharedKey string) error
 	RemovePeer(iface, publicKey string) error
 
 	// ipset
@@ -69,7 +73,7 @@ type Kernel interface {
 
 	// nftables — agent owns exactly one table: `inet <name>`, default "wg-admin"
 	NFTList(table string) (string, error) // `nft list table inet <table>` raw output; empty if table missing
-	NFTApply(ruleset string) error         // `nft -f -` atomic
+	NFTApply(ruleset string) error        // `nft -f -` atomic
 
 	// Informational
 	Version() string

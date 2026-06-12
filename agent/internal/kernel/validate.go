@@ -34,6 +34,22 @@ func validatePublicKey(k string) error {
 	return nil
 }
 
+// validatePresharedKey accepts the same shape as a WG key: 44 base64 chars
+// decoding to 32 bytes. Callers pass "" to mean "no PSK" and must skip this.
+func validatePresharedKey(k string) error {
+	if len(k) != 44 {
+		return fmt.Errorf("%w: preshared key must be 44 base64 chars, got %d", ErrInvalidKey, len(k))
+	}
+	decoded, err := base64.StdEncoding.DecodeString(k)
+	if err != nil {
+		return fmt.Errorf("%w: preshared key: %v", ErrInvalidKey, err)
+	}
+	if len(decoded) != 32 {
+		return fmt.Errorf("%w: preshared key decoded %d bytes, want 32", ErrInvalidKey, len(decoded))
+	}
+	return nil
+}
+
 func validateAllowedIPs(s string) error {
 	if strings.TrimSpace(s) == "" {
 		return fmt.Errorf("allowed-ips is empty")
