@@ -19,6 +19,43 @@ func validateNFTBody(body string) error {
 	if nftForbiddenTokens.MatchString(body) {
 		return fmt.Errorf("nft body must not contain `table`/`delete`/`flush`/`include` (agent wraps it in its own wg-admin transaction)")
 	}
+	if err := nftBracesContained(body); err != nil {
+		return err
+	}
+	return nil
+}
+
+// nftBracesContained ensures the body's braces stay within the single wrapper
+// table the agent generates. The body is concatenated inside
+// `table inet wg-admin { <body> }`; if a `}` ever drops the depth below the
+// wrapper level, the body has closed our table early and can open a foreign
+// one (e.g. `}\nadd table inet evil { ... }`) — exactly the escape the
+// line-anchored token blocklist misses, because such lines start with `add`,
+// `}` or whitespace, not a forbidden keyword. `#` comments are honoured so a
+// brace inside a comment doesn't trip the counter.
+func nftBracesContained(body string) error {
+	depth := 0
+	inComment := false
+	for _, r := range body {
+		switch {
+		case inComment:
+			if r == '\n' {
+				inComment = false
+			}
+		case r == '#':
+			inComment = true
+		case r == '{':
+			depth++
+		case r == '}':
+			depth--
+			if depth < 0 {
+				return fmt.Errorf("nft body unbalanced: a `}` closes the wg-admin table wrapper (body must stay inside its own table)")
+			}
+		}
+	}
+	if depth != 0 {
+		return fmt.Errorf("nft body has %d unclosed `{` (braces must balance inside the wg-admin table)", depth)
+	}
 	return nil
 }
 

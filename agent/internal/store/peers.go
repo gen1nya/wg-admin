@@ -150,6 +150,22 @@ func (s *Store) UpdatePeer(ctx context.Context, id int64, patch PeerPatch) error
 	return nil
 }
 
+// AddressTaken reports whether any peer on the interface already holds addr.
+// Used to reject an explicit client address before INSERT; the unique index
+// is the race-proof backstop.
+func (s *Store) AddressTaken(ctx context.Context, ifaceID int64, addr string) (bool, error) {
+	var one int
+	err := s.DB.QueryRowContext(ctx,
+		`SELECT 1 FROM peers WHERE interface_id=? AND address=? LIMIT 1`, ifaceID, addr).Scan(&one)
+	if errors.Is(err, sql.ErrNoRows) {
+		return false, nil
+	}
+	if err != nil {
+		return false, err
+	}
+	return true, nil
+}
+
 func (s *Store) DeletePeer(ctx context.Context, id int64) error {
 	res, err := s.DB.ExecContext(ctx, `DELETE FROM peers WHERE id=?`, id)
 	if err != nil {

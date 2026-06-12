@@ -73,6 +73,41 @@ func TestNFTBodyRejectsForbiddenTokens(t *testing.T) {
 	}
 }
 
+// TestNFTBodyRejectsBraceEscape: the body is wrapped in
+// `table inet wg-admin { <body> }`. A body that closes the wrapper early with
+// `}` and opens a foreign table slips past the line-anchored token blocklist
+// (the malicious line starts with `add`/`}`), so brace-containment must reject
+// it. This is the documented ownership invariant: agent touches only its table.
+func TestNFTBodyRejectsBraceEscape(t *testing.T) {
+	e, _ := newEngine(t)
+	ctx := context.Background()
+
+	escapes := []string{
+		// Close wg-admin, open a drop-all table; trailing wrapper `}` balances.
+		"}\nadd table inet evil { chain c { type filter hook input priority 0; policy drop; }",
+		// Bare early close.
+		"chain c { policy accept; } }",
+		// Unbalanced open.
+		"chain c { policy accept;",
+	}
+	for _, body := range escapes {
+		_, _, err := e.Create(ctx, "cli", "", plan.DesiredState{
+			NFT: &plan.NFTSpec{Body: body},
+		})
+		if err == nil {
+			t.Errorf("brace-escape body %q: want error, got nil", body)
+		}
+	}
+
+	// A legitimately balanced body with a nested set-add statement must pass.
+	ok := "chain forward {\n  type filter hook forward priority 0; policy accept;\n  ip saddr 10.0.0.0/8 add @seen { ip saddr timeout 60s }\n}"
+	if _, _, err := e.Create(ctx, "cli", "", plan.DesiredState{
+		NFT: &plan.NFTSpec{Body: ok},
+	}); err != nil {
+		t.Errorf("balanced body wrongly rejected: %v", err)
+	}
+}
+
 func TestNFTRevertRestoresSnapshot(t *testing.T) {
 	e, k := newEngine(t)
 	ctx := context.Background()

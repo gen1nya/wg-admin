@@ -1,11 +1,14 @@
 package api
 
 import (
+	"context"
 	"encoding/json"
 	"fmt"
 	"log/slog"
 	"net/http"
+	"net/netip"
 	"strconv"
+	"strings"
 	"time"
 
 	"github.com/gen1nya/wg-admin/agent/internal/model"
@@ -15,11 +18,11 @@ import (
 )
 
 type createPeerReq struct {
-	Name          string  `json:"name"`
-	Address       string  `json:"address,omitempty"` // "10.8.1.5/32" — optional, auto-assigned
-	DefaultExitID *int64  `json:"default_exit_id,omitempty"`
-	Notes         string  `json:"notes,omitempty"`
-	Tags          string  `json:"tags,omitempty"` // raw JSON array as string
+	Name          string `json:"name"`
+	Address       string `json:"address,omitempty"` // "10.8.1.5/32" — optional, auto-assigned
+	DefaultExitID *int64 `json:"default_exit_id,omitempty"`
+	Notes         string `json:"notes,omitempty"`
+	Tags          string `json:"tags,omitempty"` // raw JSON array as string
 }
 
 func (s *Server) listPeers(w http.ResponseWriter, r *http.Request) {
@@ -87,21 +90,21 @@ func (s *Server) createPeer(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	addr := req.Address
-	if addr == "" {
-		a, err := s.Store.NextFreeAddress(ctx, iface)
-		if err != nil {
-			writeErr(w, http.StatusConflict, err.Error())
-			return
-		}
-		addr = a
-	}
-
 	tags := req.Tags
 	if tags == "" {
 		tags = "[]"
 	}
 
+	// Allocate/validate the address and insert under peerMu so two concurrent
+	// creates can't pick the same /32. Everything that reads "what's free" and
+	// then writes must be inside this critical section.
+	s.peerMu.Lock()
+	addr, code, err := s.resolvePeerAddress(ctx, iface, req.Address)
+	if err != nil {
+		s.peerMu.Unlock()
+		writeErr(w, code, err.Error())
+		return
+	}
 	peer := &model.Peer{
 		InterfaceID:   iface.ID,
 		Name:          req.Name,
@@ -114,9 +117,15 @@ func (s *Server) createPeer(w http.ResponseWriter, r *http.Request) {
 		Tags:          tags,
 		CreatedAt:     time.Now().Unix(),
 	}
-
 	id, err := s.Store.InsertPeer(ctx, peer)
+	s.peerMu.Unlock()
 	if err != nil {
+		// The unique index (migration 0005) turns a lost race into a clean
+		// conflict instead of a silent duplicate.
+		if isUniqueViolation(err) {
+			writeErr(w, http.StatusConflict, "address "+addr+" already in use on "+iface.Name)
+			return
+		}
 		writeErr(w, http.StatusInternalServerError, "insert: "+err.Error())
 		return
 	}
@@ -139,6 +148,83 @@ func (s *Server) createPeer(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, http.StatusCreated, peer)
 }
 
+// resolvePeerAddress returns the canonical "ip/mask" string to store for a new
+// peer. With an empty request it auto-allocates the next free host address;
+// with an explicit one it validates the address is a host route inside the
+// interface subnet, isn't the interface's own address, and isn't taken.
+// Must be called with peerMu held. The int is the HTTP status to use on error.
+func (s *Server) resolvePeerAddress(ctx context.Context, iface model.Interface, requested string) (string, int, error) {
+	if strings.TrimSpace(requested) == "" {
+		a, err := s.Store.NextFreeAddress(ctx, iface)
+		if err != nil {
+			return "", http.StatusConflict, err
+		}
+		return a, 0, nil
+	}
+	addr, err := validateClientAddress(iface, requested)
+	if err != nil {
+		return "", http.StatusBadRequest, err
+	}
+	taken, err := s.Store.AddressTaken(ctx, iface.ID, addr)
+	if err != nil {
+		return "", http.StatusInternalServerError, err
+	}
+	if taken {
+		return "", http.StatusConflict, fmt.Errorf("address %s already in use on %s", addr, iface.Name)
+	}
+	return addr, 0, nil
+}
+
+// validateClientAddress canonicalises and checks an operator-supplied client
+// address. It must be a single host (/32 for IPv4, /128 for IPv6) inside the
+// interface subnet and distinct from the interface's own address — otherwise a
+// caller could pass another peer's /32 (kernel moves the allowed-ip, cutting
+// that client off) or 0.0.0.0/0 (peer captures all interface traffic).
+func validateClientAddress(iface model.Interface, requested string) (string, error) {
+	requested = strings.TrimSpace(requested)
+	host, err := netip.ParseAddr(requested)
+	if err != nil {
+		p, perr := netip.ParsePrefix(requested)
+		if perr != nil {
+			return "", fmt.Errorf("invalid address %q: not an IP or CIDR", requested)
+		}
+		hostBits := 32
+		if p.Addr().Is6() {
+			hostBits = 128
+		}
+		if p.Bits() != hostBits {
+			return "", fmt.Errorf("client address must be a single host (/%d), got %s", hostBits, requested)
+		}
+		host = p.Addr()
+	}
+	host = host.Unmap()
+
+	subnet, err := netip.ParsePrefix(iface.Subnet)
+	if err != nil {
+		return "", fmt.Errorf("interface subnet %q unparseable: %w", iface.Subnet, err)
+	}
+	if host.Is4() != subnet.Addr().Is4() {
+		return "", fmt.Errorf("address %s family differs from interface subnet %s", host, iface.Subnet)
+	}
+	if !subnet.Contains(host) {
+		return "", fmt.Errorf("address %s is outside interface subnet %s", host, iface.Subnet)
+	}
+	if ifAddr, err := netip.ParsePrefix(iface.Address); err == nil && ifAddr.Addr().Unmap() == host {
+		return "", fmt.Errorf("address %s is the interface's own address", host)
+	}
+
+	bits := 32
+	if host.Is6() {
+		bits = 128
+	}
+	return fmt.Sprintf("%s/%d", host, bits), nil
+}
+
+// isUniqueViolation reports whether err is a SQLite UNIQUE-constraint failure.
+func isUniqueViolation(err error) bool {
+	return err != nil && strings.Contains(err.Error(), "UNIQUE constraint failed")
+}
+
 func (s *Server) updatePeer(w http.ResponseWriter, r *http.Request) {
 	id, err := strconv.ParseInt(r.PathValue("id"), 10, 64)
 	if err != nil {
@@ -159,6 +245,31 @@ func (s *Server) updatePeer(w http.ResponseWriter, r *http.Request) {
 		writeErr(w, statusForErr(err), err.Error())
 		return
 	}
+
+	// Toggling `enabled` must reach the kernel, not just the DB — otherwise a
+	// "disabled" (revoked) client keeps its tunnel until the next agent restart,
+	// and an "enabled" one stays absent. Only clients interfaces are touched;
+	// mesh peers are out of tier-1 scope. A kernel failure is surfaced (500) so
+	// the operator knows the revoke/enable didn't take; the DB already records
+	// the intent and boot-reconcile heals the drift.
+	if patch.Enabled != nil {
+		if iface, ierr := s.Store.GetInterface(r.Context(), updated.InterfaceID); ierr == nil && iface.Role == model.RoleClients {
+			var kerr error
+			if *patch.Enabled {
+				kerr = s.Kernel.SetPeer(iface.Name, updated.PublicKey, updated.Address)
+			} else {
+				kerr = s.Kernel.RemovePeer(iface.Name, updated.PublicKey)
+			}
+			if kerr != nil {
+				slog.Error("kernel peer toggle failed", "err", kerr, "iface", iface.Name, "enabled", *patch.Enabled)
+				payload, _ := json.Marshal(patch)
+				_ = s.Store.LogAudit(r.Context(), audActor(r), "peer.update", "peer", &id, string(payload))
+				writeErr(w, http.StatusInternalServerError, "kernel: "+kerr.Error())
+				return
+			}
+		}
+	}
+
 	payload, _ := json.Marshal(patch)
 	_ = s.Store.LogAudit(r.Context(), audActor(r), "peer.update", "peer", &id, string(payload))
 	writeJSON(w, http.StatusOK, updated)

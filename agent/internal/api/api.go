@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"errors"
 	"net/http"
+	"sync"
 
 	"github.com/gen1nya/wg-admin/agent/internal/kernel"
 	"github.com/gen1nya/wg-admin/agent/internal/plan"
@@ -14,6 +15,12 @@ type Server struct {
 	Store  *store.Store
 	Kernel kernel.Kernel
 	Plan   *plan.Engine
+
+	// peerMu serializes peer address allocation + insert so two concurrent
+	// POSTs can't read the same "free" address and both claim it. The unique
+	// index from migration 0005 is the DB-level backstop; this keeps the
+	// race from ever reaching it on the happy path.
+	peerMu sync.Mutex
 }
 
 // Mux returns the HTTP handler with all routes registered.
