@@ -19,6 +19,7 @@ import (
 	"github.com/gen1nya/wg-admin/agent/internal/kernel"
 	"github.com/gen1nya/wg-admin/agent/internal/plan"
 	"github.com/gen1nya/wg-admin/agent/internal/reconcile"
+	"github.com/gen1nya/wg-admin/agent/internal/rttprobe"
 	"github.com/gen1nya/wg-admin/agent/internal/server"
 	"github.com/gen1nya/wg-admin/agent/internal/store"
 )
@@ -43,6 +44,8 @@ Flags (daemon):
   -socket   unix socket path (default /run/wg-agent.sock)
   -db       sqlite path       (default /var/lib/wg-admin/state.db)
   -geoip    MaxMind .mmdb path (default /var/lib/wg-admin/GeoLite2-City.mmdb; absent = geo off)
+  -rtt      ping peers' tunnel IP to measure RTT, best-effort (default true)
+  -rtt-interval  seconds between RTT probe cycles (default 30)
   -mock     use in-memory kernel instead of host state
 
 Flags (import):
@@ -131,6 +134,8 @@ func runDaemon(args []string) error {
 	dbPath := fs.String("db", "/var/lib/wg-admin/state.db", "sqlite database path")
 	geoipPath := fs.String("geoip", envOr("WG_ADMIN_GEOIP_DB", "/var/lib/wg-admin/GeoLite2-City.mmdb"),
 		"path to a MaxMind .mmdb (GeoLite2-City/-Country); absent file = geo disabled")
+	rttProbe := fs.Bool("rtt", true, "ping connected peers' tunnel IP to measure RTT (best-effort)")
+	rttInterval := fs.Int("rtt-interval", 30, "seconds between RTT probe cycles")
 	mock := fs.Bool("mock", false, "use mock kernel (no host changes)")
 	_ = fs.Parse(args)
 
@@ -182,7 +187,16 @@ func runDaemon(args []string) error {
 		slog.Info("geoip disabled (no database)", "path", geo.Path())
 	}
 
-	apiSrv := &api.Server{Store: st, Kernel: k, Plan: engine, Geo: geo}
+	var prober *rttprobe.Prober
+	if !*mock && *rttProbe {
+		prober = rttprobe.New(k, time.Duration(*rttInterval)*time.Second)
+		proberCtx, proberCancel := context.WithCancel(context.Background())
+		defer proberCancel()
+		go prober.Run(proberCtx)
+		slog.Info("rtt probing enabled", "interval_sec", *rttInterval)
+	}
+
+	apiSrv := &api.Server{Store: st, Kernel: k, Plan: engine, Geo: geo, RTT: prober}
 	srv := server.New(server.Config{
 		SocketPath: *socketPath,
 		SocketMode: 0o660,

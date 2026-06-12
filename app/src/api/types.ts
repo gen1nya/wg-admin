@@ -112,6 +112,10 @@ export interface GeoEntry {
   latest_handshake: number;
   rx_bytes: number;
   tx_bytes: number;
+  // Tunnel-ping RTT (ms) when the peer answered ICMP on its tunnel IP; absent
+  // otherwise (timeout, never probed, or a Windows client that drops echo).
+  rtt_ms?: number;
+  rtt_age_sec?: number;
   unknown?: boolean;
 }
 

@@ -32,6 +32,10 @@ function locationText(e: GeoEntry): string {
   return e.country_code || '—';
 }
 
+function rttText(e: GeoEntry): string {
+  return e.rtt_ms != null ? `${e.rtt_ms.toFixed(e.rtt_ms < 10 ? 1 : 0)} ms` : '—';
+}
+
 // Один маркер на координату: GeoLite2 отдаёт центроид города, поэтому все пиры
 // одного города ложатся в одну точку — группируем и показываем списком в попапе.
 interface LocGroup {
@@ -72,7 +76,8 @@ function popupHtml(g: LocGroup): string {
       const live = isHandshakeLive(p.latest_handshake);
       const dot = live ? '#10b981' : '#737373';
       const name = esc(p.peer_name || p.public_key.slice(0, 10) + '…');
-      const meta = `${esc(p.interface)} · ${relativeTime(p.latest_handshake)} · ↓${formatBytes(
+      const rtt = p.rtt_ms != null ? ` · ${esc(rttText(p))}` : '';
+      const meta = `${esc(p.interface)} · ${relativeTime(p.latest_handshake)}${rtt} · ↓${formatBytes(
         p.rx_bytes,
       )} ↑${formatBytes(p.tx_bytes)}`;
       return `<div style="margin:2px 0"><span style="display:inline-block;width:8px;height:8px;border-radius:9999px;background:${dot};margin-right:6px"></span><b>${name}</b><br><span style="color:#9ca3af;font-size:11px;margin-left:14px">${meta}</span></div>`;
@@ -187,6 +192,7 @@ onUnmounted(() => {
         <span class="inline-block w-2.5 h-2.5 rounded-full" style="background:#9ca3af"></span>
         без свежего handshake
       </span>
+      <span class="text-neutral-600">· RTT — пинг туннеля, Windows обычно N/A (фаервол режет ICMP)</span>
       <span v-if="enabled && data?.database" class="ml-auto font-mono text-neutral-600">
         {{ data.database }}
       </span>
@@ -207,6 +213,10 @@ onUnmounted(() => {
             <th class="px-2 py-1 font-medium">Локация</th>
             <th class="px-2 py-1 font-medium">Endpoint IP</th>
             <th class="px-2 py-1 font-medium">Handshake</th>
+            <th
+              class="px-2 py-1 font-medium"
+              title="RTT через туннель (пинг tunnel-IP). Windows часто N/A — фаервол режет ICMP на WG-адаптере"
+            >RTT</th>
             <th class="px-2 py-1 font-medium">Трафик</th>
           </tr>
         </thead>
@@ -226,6 +236,9 @@ onUnmounted(() => {
             </td>
             <td class="px-2 py-1 font-mono text-neutral-400">{{ e.endpoint_ip || '—' }}</td>
             <td class="px-2 py-1 text-neutral-400">{{ relativeTime(e.latest_handshake) }}</td>
+            <td class="px-2 py-1 font-mono" :class="e.rtt_ms != null ? 'text-neutral-200' : 'text-neutral-600'">
+              {{ rttText(e) }}
+            </td>
             <td class="px-2 py-1 font-mono text-xs text-neutral-400 whitespace-nowrap">
               ↓{{ formatBytes(e.rx_bytes) }} ↑{{ formatBytes(e.tx_bytes) }}
             </td>

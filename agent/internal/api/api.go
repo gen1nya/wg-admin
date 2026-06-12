@@ -9,6 +9,7 @@ import (
 	"github.com/gen1nya/wg-admin/agent/internal/geoip"
 	"github.com/gen1nya/wg-admin/agent/internal/kernel"
 	"github.com/gen1nya/wg-admin/agent/internal/plan"
+	"github.com/gen1nya/wg-admin/agent/internal/rttprobe"
 	"github.com/gen1nya/wg-admin/agent/internal/store"
 )
 
@@ -21,6 +22,10 @@ type Server struct {
 	// May be a disabled (no-op) resolver when no geo DB is configured; the
 	// nil *geoip.Resolver is also safe to call.
 	Geo *geoip.Resolver
+
+	// RTT holds the latest best-effort tunnel-ping measurements per peer. May
+	// be nil (probing disabled / mock); the nil *rttprobe.Prober is safe.
+	RTT *rttprobe.Prober
 
 	// peerMu serializes peer address allocation + insert so two concurrent
 	// POSTs can't read the same "free" address and both claim it. The unique

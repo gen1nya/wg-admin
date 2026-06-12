@@ -5,6 +5,7 @@ import (
 	"net"
 	"net/http"
 	"net/netip"
+	"time"
 
 	"github.com/gen1nya/wg-admin/agent/internal/store"
 )
@@ -31,7 +32,12 @@ type geoEntry struct {
 	LatestHandshake int64   `json:"latest_handshake"`
 	RxBytes         int64   `json:"rx_bytes"`
 	TxBytes         int64   `json:"tx_bytes"`
-	Unknown         bool    `json:"unknown,omitempty"` // kernel peer absent from DB
+	// RTTms is the tunnel-ping round trip (ms) when the peer answered ICMP on
+	// its tunnel IP; omitted otherwise (timeout, never probed, or — commonly —
+	// a Windows client that drops echo). RTTAgeSec is how stale that sample is.
+	RTTms     float64 `json:"rtt_ms,omitempty"`
+	RTTAgeSec int64   `json:"rtt_age_sec,omitempty"`
+	Unknown   bool    `json:"unknown,omitempty"` // kernel peer absent from DB
 }
 
 type geoResponse struct {
@@ -59,6 +65,7 @@ func (s *Server) listGeo(w http.ResponseWriter, r *http.Request) {
 		DBPath:   s.Geo.Path(),
 		Entries:  []geoEntry{},
 	}
+	now := time.Now().Unix()
 
 	for _, iface := range ifaces {
 		st, err := s.Kernel.ShowInterface(iface.Name)
@@ -89,6 +96,11 @@ func (s *Server) listGeo(w http.ResponseWriter, r *http.Request) {
 					entry.HasLocation = info.HasLocation
 					entry.AccuracyKm = info.Accuracy
 				}
+			}
+
+			if smp, ok := s.RTT.Get(kp.PublicKey); ok && smp.OK {
+				entry.RTTms = smp.RTTms
+				entry.RTTAgeSec = now - smp.MeasuredAt
 			}
 
 			dbPeer, err := s.Store.GetPeerByPublicKey(ctx, kp.PublicKey)
