@@ -68,6 +68,11 @@ onMounted(() => {
             :class="{ 'text-white': route.name === 'overview' || route.name === 'interface' }"
           >Интерфейсы</RouterLink>
           <RouterLink
+            to="/map"
+            class="hover:text-white"
+            :class="{ 'text-white': route.name === 'map' }"
+          >Карта</RouterLink>
+          <RouterLink
             to="/plans"
             class="hover:text-white"
             :class="{ 'text-white': route.name === 'plans' || route.name === 'plan' }"

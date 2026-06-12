@@ -10,6 +10,7 @@ const routes: RouteRecordRaw[] = [
     component: () => import('./pages/Interface.vue'),
     props: true,
   },
+  { path: '/map', name: 'map', component: () => import('./pages/Map.vue') },
   { path: '/plans', name: 'plans', component: () => import('./pages/Plans.vue') },
   { path: '/plans/new', name: 'plan-new', component: () => import('./pages/PlanNew.vue') },
   {

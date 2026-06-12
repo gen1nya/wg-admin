@@ -1,6 +1,7 @@
 import type {
   AuditEntry,
   Exit,
+  GeoResponse,
   Interface,
   InterfaceDetail,
   Peer,
@@ -112,6 +113,9 @@ export const api = {
 
   // traffic
   traffic: () => list<TrafficEntry>('/api/traffic'),
+
+  // geo — peers located by endpoint IP for the map view
+  geo: () => request<GeoResponse>('/api/geo'),
 
   // audit
   audit: (limit = 200) => list<AuditEntry>(`/api/audit?limit=${limit}`),

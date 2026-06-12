@@ -91,6 +91,37 @@ export interface TrafficEntry {
   unknown?: boolean;
 }
 
+// One connected peer located by its endpoint IP. Secrets are never sent.
+// has_location=false (and lat/lon absent) when geo is disabled or the endpoint
+// couldn't be resolved — the entry is still listed, just not placed on the map.
+export interface GeoEntry {
+  peer_id?: number;
+  peer_name?: string;
+  interface: string;
+  role: Role;
+  public_key: string;
+  endpoint: string;
+  endpoint_ip: string;
+  country?: string;
+  country_code?: string;
+  city?: string;
+  lat?: number;
+  lon?: number;
+  has_location: boolean;
+  accuracy_km?: number;
+  latest_handshake: number;
+  rx_bytes: number;
+  tx_bytes: number;
+  unknown?: boolean;
+}
+
+export interface GeoResponse {
+  enabled: boolean;       // a geo DB is loaded on the agent
+  database?: string;      // mmdb type, e.g. "GeoLite2-City"
+  db_path?: string;       // where to drop the DB when absent
+  entries: GeoEntry[];
+}
+
 export interface AuditEntry {
   id: number;
   ts: number;

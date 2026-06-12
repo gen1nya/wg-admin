@@ -1,10 +1,16 @@
 import type { RequestHandler } from 'express';
 
-// CSP: self only. style-src allows unsafe-inline for now (see frontend-spec);
-// tightening via nonce is tier-2.
+// CSP: self only, plus OSM map tiles. style-src allows unsafe-inline for now
+// (see frontend-spec); tightening via nonce is tier-2.
+//
+// img-src additionally allows https://tile.openstreetmap.org because the map
+// view (Leaflet) loads OSM raster tiles as <img>. This is the only off-origin
+// resource the SPA fetches: tiles are images, so script-src/connect-src stay
+// 'self'. To keep the panel fully self-contained (air-gap / no off-origin
+// requests), proxy tiles through this server instead and drop this entry.
 const CSP =
   "default-src 'self'; " +
-  "img-src 'self' data:; " +
+  "img-src 'self' data: https://tile.openstreetmap.org; " +
   "script-src 'self'; " +
   "style-src 'self' 'unsafe-inline'; " +
   "connect-src 'self'; " +
