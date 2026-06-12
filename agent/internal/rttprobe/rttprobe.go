@@ -26,8 +26,8 @@ import (
 )
 
 const (
-	defaultInterval      = 30 * time.Second
-	probeMaxHandshakeAge = 600 // seconds; don't ping peers idle longer than this
+	defaultInterval      = 5 * time.Minute
+	probeMaxHandshakeAge = 900 // seconds; don't ping peers idle longer than this
 	pingTimeout          = 1 * time.Second
 	maxConcurrent        = 8
 )

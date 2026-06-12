@@ -45,7 +45,7 @@ Flags (daemon):
   -db       sqlite path       (default /var/lib/wg-admin/state.db)
   -geoip    MaxMind .mmdb path (default /var/lib/wg-admin/GeoLite2-City.mmdb; absent = geo off)
   -rtt      ping peers' tunnel IP to measure RTT, best-effort (default true)
-  -rtt-interval  seconds between RTT probe cycles (default 30)
+  -rtt-interval  seconds between RTT probe cycles (default 300)
   -mock     use in-memory kernel instead of host state
 
 Flags (import):
@@ -135,7 +135,7 @@ func runDaemon(args []string) error {
 	geoipPath := fs.String("geoip", envOr("WG_ADMIN_GEOIP_DB", "/var/lib/wg-admin/GeoLite2-City.mmdb"),
 		"path to a MaxMind .mmdb (GeoLite2-City/-Country); absent file = geo disabled")
 	rttProbe := fs.Bool("rtt", true, "ping connected peers' tunnel IP to measure RTT (best-effort)")
-	rttInterval := fs.Int("rtt-interval", 30, "seconds between RTT probe cycles")
+	rttInterval := fs.Int("rtt-interval", 300, "seconds between RTT probe cycles")
 	mock := fs.Bool("mock", false, "use mock kernel (no host changes)")
 	_ = fs.Parse(args)
 
