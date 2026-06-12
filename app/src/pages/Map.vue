@@ -22,6 +22,16 @@ const located = computed(() => (data.value?.entries ?? []).filter((e) => e.has_l
 const unlocated = computed(() => (data.value?.entries ?? []).filter((e) => !e.has_location));
 const enabled = computed(() => data.value?.enabled ?? false);
 
+// Полный список под картой — самые недавно активные сверху.
+const sortedEntries = computed(() =>
+  [...(data.value?.entries ?? [])].sort((a, b) => b.latest_handshake - a.latest_handshake),
+);
+
+function locationText(e: GeoEntry): string {
+  if (e.has_location) return [e.city, e.country].filter(Boolean).join(', ') || e.country_code || '—';
+  return e.country_code || '—';
+}
+
 // Один маркер на координату: GeoLite2 отдаёт центроид города, поэтому все пиры
 // одного города ложатся в одну точку — группируем и показываем списком в попапе.
 interface LocGroup {
@@ -84,9 +94,9 @@ function renderMarkers(): void {
     const marker = L.circleMarker([g.lat, g.lon], {
       radius,
       color,
-      weight: 1.5,
+      weight: 2,
       fillColor: color,
-      fillOpacity: 0.5,
+      fillOpacity: 0.6,
     });
     marker.bindPopup(popupHtml(g));
     marker.bindTooltip(`${g.peers.length}`, {
@@ -182,37 +192,43 @@ onUnmounted(() => {
       </span>
     </div>
 
-    <section v-if="unlocated.length" class="space-y-2">
+    <section v-if="data?.entries.length" class="space-y-2">
       <h2 class="text-sm font-semibold text-neutral-300">
-        Без геолокации ({{ unlocated.length }})
-        <span class="font-normal text-neutral-500">— приватный/нерезолвимый endpoint или база без координат</span>
+        Клиенты ({{ data.entries.length }})
+        <span v-if="unlocated.length" class="font-normal text-neutral-500">
+          — {{ unlocated.length }} без геолокации (приватный/нерезолвимый endpoint)
+        </span>
       </h2>
       <table class="w-full text-sm">
         <thead class="text-left text-xs uppercase text-neutral-500 border-b border-neutral-800">
           <tr>
             <th class="px-2 py-1 font-medium">Имя</th>
             <th class="px-2 py-1 font-medium">Интерфейс</th>
+            <th class="px-2 py-1 font-medium">Локация</th>
             <th class="px-2 py-1 font-medium">Endpoint IP</th>
-            <th class="px-2 py-1 font-medium">Страна</th>
             <th class="px-2 py-1 font-medium">Handshake</th>
+            <th class="px-2 py-1 font-medium">Трафик</th>
           </tr>
         </thead>
         <tbody>
-          <tr v-for="e in unlocated" :key="e.public_key" class="border-b border-neutral-800/60">
+          <tr v-for="e in sortedEntries" :key="e.public_key" class="border-b border-neutral-800/60 hover:bg-neutral-900/40">
             <td class="px-2 py-1">
               <span
                 class="inline-block w-2 h-2 rounded-full mr-1.5 align-middle"
                 :class="isHandshakeLive(e.latest_handshake) ? 'bg-emerald-500' : 'bg-neutral-600'"
+                title="handshake"
               ></span>
               {{ e.peer_name || (e.unknown ? '(не в БД)' : e.public_key.slice(0, 10) + '…') }}
             </td>
             <td class="px-2 py-1 font-mono text-neutral-400">{{ e.interface }}</td>
-            <td class="px-2 py-1 font-mono text-neutral-300">{{ e.endpoint_ip || '—' }}</td>
-            <td class="px-2 py-1 text-neutral-400">
-              <template v-if="e.country_code">{{ e.country_code }}</template>
-              <template v-else>—</template>
+            <td class="px-2 py-1" :class="e.has_location ? 'text-neutral-300' : 'text-neutral-600'">
+              {{ locationText(e) }}
             </td>
+            <td class="px-2 py-1 font-mono text-neutral-400">{{ e.endpoint_ip || '—' }}</td>
             <td class="px-2 py-1 text-neutral-400">{{ relativeTime(e.latest_handshake) }}</td>
+            <td class="px-2 py-1 font-mono text-xs text-neutral-400 whitespace-nowrap">
+              ↓{{ formatBytes(e.rx_bytes) }} ↑{{ formatBytes(e.tx_bytes) }}
+            </td>
           </tr>
         </tbody>
       </table>
@@ -221,8 +237,47 @@ onUnmounted(() => {
 </template>
 
 <style>
-/* Маркеры-счётчики поверх кружков. Leaflet рисует tooltip отдельным слоем,
-   поэтому стилизуем глобально (не scoped). */
+/* Leaflet рисует слои/контролы вне Vue-дерева, поэтому стили глобальные
+   (не scoped). Карту приводим к тёмной теме приложения. */
+
+/* Фон под тайлами = neutral-950. */
+.leaflet-container {
+  background: #0a0a0a;
+  font-family: inherit;
+}
+
+/* Тёмная карта без смены провайдера: инвертируем растровые тайлы OSM и
+   возвращаем оттенок hue-rotate(180). Фильтр только на tile-pane —
+   маркеры (overlay-pane) и попапы (popup-pane) лежат отдельными слоями
+   и остаются в нормальных цветах. */
+.leaflet-tile-pane {
+  filter: invert(1) hue-rotate(180deg) brightness(0.92) contrast(0.95) saturate(0.85);
+}
+
+/* Контролы зума. */
+.leaflet-bar a,
+.leaflet-bar a:hover {
+  background: #1c1c1f;
+  color: #d4d4d8;
+  border-bottom-color: #3f3f46;
+}
+.leaflet-bar a:hover {
+  background: #27272a;
+}
+.leaflet-bar {
+  border: 1px solid #3f3f46;
+}
+
+/* Атрибуция. */
+.leaflet-control-attribution {
+  background: rgba(20, 20, 23, 0.75) !important;
+  color: #6b7280 !important;
+}
+.leaflet-control-attribution a {
+  color: #9ca3af !important;
+}
+
+/* Маркеры-счётчики поверх кружков. */
 .wg-marker-count {
   background: transparent;
   border: none;
@@ -235,12 +290,26 @@ onUnmounted(() => {
 .wg-marker-count::before {
   display: none;
 }
+
+/* Попапы под тёмную тему. */
 .leaflet-popup-content-wrapper,
 .leaflet-popup-tip {
   background: #1c1c1f;
   color: #e5e5e5;
+  box-shadow: 0 2px 12px rgba(0, 0, 0, 0.5);
+}
+.leaflet-popup-content-wrapper {
+  border: 1px solid #3f3f46;
+  border-radius: 8px;
 }
 .leaflet-popup-content {
   margin: 10px 12px;
+  line-height: 1.4;
+}
+.leaflet-popup-close-button {
+  color: #9ca3af !important;
+}
+.leaflet-popup-close-button:hover {
+  color: #e5e5e5 !important;
 }
 </style>
