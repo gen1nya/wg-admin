@@ -23,6 +23,7 @@ const configPeer = ref<Peer | null>(null);
 const editPeer = ref<Peer | null>(null);
 const deletePeer = ref<Peer | null>(null);
 const deletingBusy = ref(false);
+const togglingId = ref<number | null>(null);
 
 let detailTimer: ReturnType<typeof setInterval> | null = null;
 
@@ -70,6 +71,24 @@ function onCreated(peer: Peer) {
 function onUpdated(peer: Peer) {
   peers.value = peers.value.map((p) => (p.id === peer.id ? peer : p));
   editPeer.value = null;
+}
+
+// Inline enable/disable: flips the peer in the kernel (revoke/restore) without
+// touching its credentials. The agent does the kernel work; we just reflect it.
+async function onToggle(peer: Peer) {
+  if (togglingId.value !== null) return;
+  togglingId.value = peer.id;
+  try {
+    const updated = await api.updatePeer(peer.id, { enabled: !peer.enabled });
+    peers.value = peers.value.map((p) => (p.id === updated.id ? updated : p));
+    error.value = null;
+    // kernel status (handshake/traffic) changes with enable/disable — refresh it
+    void loadDetail();
+  } catch (e) {
+    error.value = e instanceof ApiError ? e.message : 'toggle failed';
+  } finally {
+    togglingId.value = null;
+  }
 }
 
 async function confirmDelete() {
@@ -201,9 +220,11 @@ onUnmounted(() => {
               :peer="p"
               :status="peerStatus(p)"
               :read-only="readOnly"
+              :toggling="togglingId === p.id"
               @config="(peer) => (configPeer = peer)"
               @edit="(peer) => (editPeer = peer)"
               @delete="(peer) => (deletePeer = peer)"
+              @toggle="onToggle"
             />
           </tbody>
         </table>

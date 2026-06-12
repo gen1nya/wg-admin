@@ -9,11 +9,13 @@ const props = defineProps<{
   peer: Peer;
   status?: PeerStatus;
   readOnly?: boolean;
+  toggling?: boolean;
 }>();
 const emit = defineEmits<{
   (e: 'config', peer: Peer): void;
   (e: 'edit', peer: Peer): void;
   (e: 'delete', peer: Peer): void;
+  (e: 'toggle', peer: Peer): void;
 }>();
 
 const live = computed(() => isHandshakeLive(props.status?.latest_handshake));
@@ -37,7 +39,10 @@ const lastTx = computed(() => {
 </script>
 
 <template>
-  <tr class="border-b border-neutral-800 hover:bg-neutral-900/50">
+  <tr
+    class="border-b border-neutral-800 hover:bg-neutral-900/50"
+    :class="{ 'opacity-50': !peer.enabled }"
+  >
     <td class="px-2 py-2">
       <div class="flex items-center gap-2">
         <span
@@ -51,6 +56,10 @@ const lastTx = computed(() => {
           title="трафик сейчас"
         ></span>
         <span>{{ peer.name }}</span>
+        <span
+          v-if="!peer.enabled"
+          class="text-[10px] uppercase px-1 py-0.5 rounded bg-neutral-800 text-neutral-400 border border-neutral-700"
+        >disabled</span>
       </div>
     </td>
     <td class="px-2 py-2 font-mono text-sm text-neutral-300">{{ peer.address }}</td>
@@ -70,7 +79,22 @@ const lastTx = computed(() => {
       </div>
     </td>
     <td class="px-2 py-2 text-right">
-      <div v-if="!readOnly" class="flex justify-end gap-1">
+      <div v-if="!readOnly" class="flex items-center justify-end gap-1.5">
+        <button
+          type="button"
+          role="switch"
+          :aria-checked="peer.enabled"
+          :disabled="toggling"
+          @click="emit('toggle', peer)"
+          class="relative inline-flex h-5 w-9 shrink-0 items-center rounded-full transition-colors disabled:opacity-40 disabled:cursor-wait"
+          :class="peer.enabled ? 'bg-emerald-600' : 'bg-neutral-700'"
+          :title="peer.enabled ? 'включён — нажми, чтобы отключить (доступ отзовётся, креды сохранятся)' : 'отключён — нажми, чтобы включить'"
+        >
+          <span
+            class="inline-block h-3.5 w-3.5 transform rounded-full bg-white transition-transform"
+            :class="peer.enabled ? 'translate-x-[18px]' : 'translate-x-0.5'"
+          ></span>
+        </button>
         <button
           @click="emit('config', peer)"
           class="px-2 py-0.5 text-xs border border-neutral-700 hover:bg-neutral-800 rounded"
